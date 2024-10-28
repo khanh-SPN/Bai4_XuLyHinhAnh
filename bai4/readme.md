@@ -1,5 +1,5 @@
 
-# Phân loại y tế - So sánh mô hình SVM và K-NN
+# Phân loại y tế - So sánh mô hình SVM và K-NN from NgoDuyKhanh
 
 ## Giới thiệu
 Dự án này thực hiện phân lớp trên bộ dữ liệu y tế bằng cách sử dụng hai thuật toán phân loại chính:
@@ -31,21 +31,17 @@ Các mô hình này được huấn luyện và kiểm thử với các kịch b
 Các hình ảnh dưới đây minh họa kết quả phân loại của các mô hình tương ứng với các tỷ lệ chia khác nhau.
 
 ### Tỷ lệ 80-20
-![80-20](./demo/80-20.png)
+![80-20](/demo/80-20.png)
 
 ### Tỷ lệ 70-30
-![70-30](./demo/70-30.png)
+![70-30](/demo/70-30.png)
 
 ### Tỷ lệ 60-40
-![60-40](./demo/60-40.png)
+![60-40](/demo/60-40.png)
 
 ### Tỷ lệ 40-60
-![40-60](./demo/40-60.png)
+![40-60](/demo/40-60.png)
 """
 
-# Write the content to a README.md file
-with open("/mnt/data/README.md", "w") as f:
-    f.write(readme_content)
 
-"/mnt/data/README.md has been created with the requested content."
 
