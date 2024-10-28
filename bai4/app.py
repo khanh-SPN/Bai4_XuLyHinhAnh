@@ -1,72 +1,127 @@
+from PIL import Image
 import tkinter as tk
 from tkinter import ttk
-import cv2
-import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from sklearn.preprocessing import StandardScaler
+from pathlib import Path
 
-# Đọc ảnh từ một patch cụ thể
-def tai_anh_tu_patch(thu_muc_patch):
+# Đọc ảnh từ thư mục cố định 'images'
+def tai_anh_tu_thu_muc(status_label):
     images = []
-    for filename in os.listdir(thu_muc_patch):
-        img = cv2.imread(os.path.join(thu_muc_patch, filename), cv2.IMREAD_GRAYSCALE)  # Đọc ảnh xám
-        if img is not None:
-            img_equalized = cv2.equalizeHist(img)  # Cân bằng histogram
-            img_resized = cv2.resize(img_equalized, (64, 64))  # Resize ảnh
-            images.append(img_resized.flatten())  # Chuyển ảnh thành vector
+    status_label.config(text="Đang tải dữ liệu...")
+    window.update()  # Cập nhật giao diện để hiển thị trạng thái
+
+    # Đường dẫn cố định đến thư mục 'images'
+    thu_muc_anh = Path('./images')  # Đường dẫn cố định đến thư mục 'images'
+
+    if not thu_muc_anh.exists():
+        status_label.config(text="Thư mục không tồn tại")
+        return np.array([])  # Trả về mảng rỗng nếu thư mục không tồn tại
+
+    # Lấy tất cả các tệp .jpg từ thư mục 'images'
+    for filename in thu_muc_anh.glob('*.jpg'):
+        file_path = str(filename)  # Chuyển đổi sang chuỗi để Pillow xử lý
+
+        # Thử đọc ảnh bằng Pillow
+        try:
+            with Image.open(file_path) as img:
+                img = img.convert('L')  # Chuyển thành ảnh xám
+                img_resized = img.resize((64, 64))  # Resize ảnh
+                img_array = np.array(img_resized)  # Chuyển đổi thành mảng numpy
+                images.append(img_array.flatten())  # Chuyển ảnh thành vector
+        except Exception as e:
+            print(f"Không thể đọc tệp: {file_path} - Lỗi: {e}")
+            continue
+
+    # Kiểm tra nếu không có ảnh hợp lệ
+    if len(images) == 0:
+        status_label.config(text="Không có ảnh hợp lệ trong thư mục này")
+        return np.array([])
+
+    status_label.config(text="Tải dữ liệu xong")
     return np.array(images)
 
-# Hàm để tải các patch
-def tai_patch_anh(patch):
-    thu_muc = os.path.join('images', f'patch {patch}')  # Thư mục chứa patch ảnh
-    return tai_anh_tu_patch(thu_muc)
-
 # Hàm để chạy mô hình và đưa ra kết quả
-def chay_mo_hinh(train_ratio, test_ratio, tree, patch):
+def chay_mo_hinh(train_ratio, test_ratio, tree, status_label):
     # Xóa các dòng cũ trong bảng
     for row in tree.get_children():
         tree.delete(row)
-    
-    # Load ảnh từ patch được chọn
-    X = tai_patch_anh(patch)
-    
+
+    # Tải ảnh từ thư mục 'images'
+    X = tai_anh_tu_thu_muc(status_label)
+
+    if X.size == 0:
+        status_label.config(text="Không có dữ liệu để huấn luyện")
+        return  # Dừng nếu không có dữ liệu
+
     # Chuẩn hóa dữ liệu
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
-    
-    # Tạo nhãn giả để mô hình có thể học
-    y = np.zeros(len(X))  # Sử dụng nhãn giả, tất cả là 0 vì chỉ có một lớp
-    
+
+    # **Tạo nhãn giả cho 2 lớp**
+    # Chia dữ liệu thành 2 lớp: 50 ảnh là lớp 0, 50 ảnh là lớp 1
+    y = np.zeros(len(X))
+    y[len(X) // 2:] = 1  # Gán 50 ảnh đầu là lớp 0, 50 ảnh sau là lớp 1
+
+    # Cập nhật trạng thái "Đang huấn luyện mô hình..."
+    status_label.config(text="Đang huấn luyện mô hình...")
+    window.update()  # Cập nhật giao diện
+
     # Chia tập dữ liệu
-    X_train, X_test, _, _ = train_test_split(X, y, test_size=test_ratio, random_state=42)
-    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_ratio, stratify=y, random_state=42)
+
     # Khởi tạo mô hình
     svm = SVC(kernel='linear', C=1.0, gamma='auto')
     knn = KNeighborsClassifier(n_neighbors=7)
-    
+
     # Huấn luyện và đánh giá SVM
     svm.fit(X_train, y_train)
     y_pred_svm = svm.predict(X_test)
     accuracy_svm = accuracy_score(y_test, y_pred_svm)
-    
+    precision_svm = precision_score(y_test, y_pred_svm, average='weighted', zero_division=0)
+    recall_svm = recall_score(y_test, y_pred_svm, average='weighted', zero_division=0)
+    f1_svm = f1_score(y_test, y_pred_svm, average='weighted', zero_division=0)
+
     # Huấn luyện và đánh giá KNN
     knn.fit(X_train, y_train)
     y_pred_knn = knn.predict(X_test)
     accuracy_knn = accuracy_score(y_test, y_pred_knn)
-    
-    # Thêm kết quả vào bảng
-    tree.insert("", "end", values=("SVM", round(accuracy_svm, 2)))
-    tree.insert("", "end", values=("KNN", round(accuracy_knn, 2)))
+    precision_knn = precision_score(y_test, y_pred_knn, average='weighted', zero_division=0)
+    recall_knn = recall_score(y_test, y_pred_knn, average='weighted', zero_division=0)
+    f1_knn = f1_score(y_test, y_pred_knn, average='weighted', zero_division=0)
+
+    # Thêm kết quả vào bảng (SVM)
+    tree.insert("", "end", values=("SVM", round(accuracy_svm, 2), round(precision_svm, 2), round(recall_svm, 2), round(f1_svm, 2)))
+
+    # Thêm kết quả vào bảng (KNN)
+    tree.insert("", "end", values=("KNN", round(accuracy_knn, 2), round(precision_knn, 2), round(recall_knn, 2), round(f1_knn, 2)))
+
+    # Cập nhật trạng thái hoàn tất
+    status_label.config(text="Huấn luyện hoàn tất")
+
+# Hàm để hiển thị các nút tỷ lệ chia sau khi chọn patch
+def hien_thi_tu_chon_patch():
+    # Hiển thị các nút tỷ lệ chia train-test
+    tao_nut("80-20", 0.8, 0.2)
+    tao_nut("70-30", 0.7, 0.3)
+    tao_nut("60-40", 0.6, 0.4)
+    tao_nut("40-60", 0.4, 0.6)
+
+# Tạo nút tỷ lệ chia
+def tao_nut(text, train_ratio, test_ratio):
+    nut = ttk.Button(khung_patch, text=text, command=lambda: chay_mo_hinh(train_ratio, test_ratio, tree, status_label))
+    nut.pack(side=tk.LEFT, padx=15)
 
 # Tạo giao diện với Tkinter
 def tao_giao_dien():
+    global khung_patch, tree, status_label, window
     window = tk.Tk()
     window.title("Phân loại y tế - So sánh SVM và K-NN")
-    window.geometry("900x600")
+    window.geometry("1200x600")
     window.config(bg="#f0f0f0")
 
     # Tinh chỉnh style cho giao diện
@@ -78,40 +133,26 @@ def tao_giao_dien():
     tieu_de = tk.Label(window, text="Mô hình phân loại y tế - SVM và K-NN", font=("Helvetica", 20, "bold"), bg="#f0f0f0", fg="#333")
     tieu_de.pack(pady=20)
 
-    # Frame chứa các nút tỷ lệ chia train-test
-    khung_nut = tk.Frame(window, bg="#f0f0f0")
-    khung_nut.pack(pady=10)
+    # Khung chứa các nút lựa chọn tỷ lệ chia train-test
+    khung_patch = tk.Frame(window, bg="#f0f0f0")
+    khung_patch.pack(pady=10)
 
     # Bảng kết quả
-    cot = ("Mô hình", "Độ chính xác")
+    cot = ("Mô hình", "Độ chính xác", "Precision", "Recall", "F1-Score")
     tree = ttk.Treeview(window, columns=cot, show="headings", height=8)
     tree.pack(pady=20)
 
     # Định dạng các cột
     for col in cot:
         tree.heading(col, text=col)
-        tree.column(col, anchor=tk.CENTER, width=140)
-    
-    # Các nút chọn patch ảnh và tỷ lệ train-test
-    def tao_nut(text, train_ratio, test_ratio, patch):
-        nut = ttk.Button(khung_nut, text=text, command=lambda: chay_mo_hinh(train_ratio, test_ratio, tree, patch))
-        nut.pack(side=tk.LEFT, padx=15)
+        tree.column(col, anchor=tk.CENTER, width=180)
 
-    # Chọn các patch ảnh và tỷ lệ chia train-test
-    tao_nut("Patch 1 - 80-20", 0.8, 0.2, 1)
-    tao_nut("Patch 1 - 70-30", 0.7, 0.3, 1)
-    tao_nut("Patch 1 - 60-40", 0.6, 0.4, 1)
-    tao_nut("Patch 1 - 40-60", 0.4, 0.6, 1)
-    
-    tao_nut("Patch 2 - 80-20", 0.8, 0.2, 2)
-    tao_nut("Patch 2 - 70-30", 0.7, 0.3, 2)
-    tao_nut("Patch 2 - 60-40", 0.6, 0.4, 2)
-    tao_nut("Patch 2 - 40-60", 0.4, 0.6, 2)
-    
-    tao_nut("Patch 3 - 80-20", 0.8, 0.2, 3)
-    tao_nut("Patch 3 - 70-30", 0.7, 0.3, 3)
-    tao_nut("Patch 3 - 60-40", 0.6, 0.4, 3)
-    tao_nut("Patch 3 - 40-60", 0.4, 0.6, 3)
+    # Nút chọn tỷ lệ chia
+    hien_thi_tu_chon_patch()
+
+    # Nhãn hiển thị trạng thái
+    status_label = tk.Label(window, text="", font=("Helvetica", 12), bg="#f0f0f0", fg="blue")
+    status_label.pack(pady=10)
 
     # Khởi chạy giao diện
     window.mainloop()
